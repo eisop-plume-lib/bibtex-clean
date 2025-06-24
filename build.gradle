@@ -1,23 +1,16 @@
-buildscript {
-  dependencies {
-    if (JavaVersion.current() >= JavaVersion.VERSION_11) {
-      // Code formatting; defines targets "spotlessApply" and "spotlessCheck".
-      // https://github.com/diffplug/spotless/tags ; see tags starting "gradle/"
-      // Only works on JDK 11+.
-      classpath 'com.diffplug.spotless:spotless-plugin-gradle:7.0.4'
-    }
-  }
-}
-
 plugins {
   id 'java'
   id 'application'
 
   // To create a fat jar build/libs/...-all.jar, run: ./gradlew shadowJar
-  id 'com.github.johnrengelman.shadow' version '8.1.1'
+  id 'com.gradleup.shadow' version '8.3.7'
+
+  // Code formatting; defines targets "spotlessApply" and "spotlessCheck"
+  // Requires JDK 11 or higher; the plugin crashes under JDK 8.
+  id 'com.diffplug.spotless' version '7.0.4'
 
   // Error Prone linter
-  id('net.ltgt.errorprone') version '4.2.0'
+  id 'net.ltgt.errorprone' version '4.2.0'
 
   // Checker Framework pluggable type-checking
   id 'org.checkerframework' version '0.6.55'
@@ -34,8 +27,8 @@ repositories {
 
 ext {
   errorproneVersion = '2.38.0'
-  isJava11orHigher = JavaVersion.current() >= JavaVersion.VERSION_11
   isJava17orHigher = JavaVersion.current() >= JavaVersion.VERSION_17
+  isJava21orHigher = JavaVersion.current() >= JavaVersion.VERSION_21
 }
 
 dependencies {
@@ -44,9 +37,8 @@ dependencies {
   compileOnly "com.google.errorprone:error_prone_annotations:${errorproneVersion}"
   errorprone("com.google.errorprone:error_prone_core:${errorproneVersion}")
 
-  testImplementation 'org.junit.jupiter:junit-jupiter-api:5.13.1'
-
-  testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+  testImplementation 'org.junit.jupiter:junit-jupiter:5.13.1'
+  testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 application {
@@ -65,34 +57,31 @@ test {
   }
 }
 
-if (isJava11orHigher) {
-  apply plugin: 'com.diffplug.spotless'
-  spotless {
-    format 'misc', {
-      // define the files to apply `misc` to
-      target '*.md', '.gitignore'
+spotless {
+  format 'misc', {
+    // define the files to apply `misc` to
+    target '*.md', '.gitignore'
 
-      // define the steps to apply to those files
-      trimTrailingWhitespace()
-      leadingTabsToSpaces(2)
-      endWithNewline()
-    }
-    java {
-      targetExclude('**/WeakIdentityHashMap.java')
-      googleJavaFormat()
-      formatAnnotations()
-    }
-    groovyGradle {
-      target '**/*.gradle'
-      greclipse()  // which formatter Spotless should use to format .gradle files.
-      leadingTabsToSpaces(2)
-      trimTrailingWhitespace()
-      // endWithNewline() // Don't want to end empty files with a newline
-    }
+    // define the steps to apply to those files
+    trimTrailingWhitespace()
+    leadingTabsToSpaces(2)
+    endWithNewline()
+  }
+  java {
+    targetExclude('**/WeakIdentityHashMap.java')
+    googleJavaFormat()
+    formatAnnotations()
+  }
+  groovyGradle {
+    target '**/*.gradle'
+    greclipse()  // which formatter Spotless should use to format .gradle files.
+    leadingTabsToSpaces(2)
+    trimTrailingWhitespace()
+    // endWithNewline() // Don't want to end empty files with a newline
   }
 }
 
-/// Error Prone linter
+// Error Prone linter
 
 tasks.withType(JavaCompile).configureEach {
   // "-processing" avoids javac warning "No processor claimed any of these annotations".
@@ -103,9 +92,10 @@ tasks.withType(JavaCompile).configureEach {
     disable('ReferenceEquality') // Use Interning Checker instead.
     disable('AnnotateFormatMethod') // Error Prone doesn't know about Checker Framework @FormatMethod
   }
+  options.errorprone.enabled = isJava17orHigher
 }
 
-/// Checker Framework pluggable type-checking
+// Checker Framework pluggable type-checking
 
 apply plugin: 'org.checkerframework'
 
@@ -115,7 +105,7 @@ if (true) {
 } else {
   // To use a snapshot version of the EISOP Checker Framework.
   // TODO: Change the above test to false to use a snapshot.
-  ext.checkerFrameworkVersion = '3.49.3-eisop1'
+  // ext.checkerFrameworkVersion = '3.49.3-eisop1-SNAPSHOT'
   configurations.all {
     resolutionStrategy.cacheChangingModulesFor 0, 'minutes'
   }
@@ -165,7 +155,7 @@ checkerFramework {
   ]
 }
 
-/// Javadoc
+// Javadoc
 
 // Turn Javadoc warnings into errors.
 javadoc {
@@ -187,7 +177,7 @@ configurations {
   requireJavadoc
 }
 dependencies {
-  requireJavadoc 'org.plumelib:require-javadoc:1.0.9'
+  requireJavadoc 'org.plumelib:require-javadoc:2.0.0'
 }
 task requireJavadoc(type: JavaExec) {
   group = 'Documentation'
@@ -195,10 +185,20 @@ task requireJavadoc(type: JavaExec) {
   mainClass = 'org.plumelib.javadoc.RequireJavadoc'
   classpath = configurations.requireJavadoc
   args 'src/main/java'
+  jvmArgs += [
+    '--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+    '--add-exports=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+    '--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+    '--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+    '--add-opens=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED',
+    '--add-opens=jdk.compiler/com.sun.tools.javac.parser=ALL-UNNAMED',
+    '--add-opens=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED',
+    '--add-opens=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED',
+  ]
 }
 check.dependsOn requireJavadoc
 
-/// Emacs support
+// Emacs support
 
 /* Make Emacs TAGS table */
 task tags(type: Exec) {
