@@ -49,6 +49,7 @@ public final class BibtexClean {
    *
    * @param args command-line arguments
    */
+  @SuppressWarnings("PMD.AvoidReassigningLoopVariables")
   public static void main(String[] args) {
     for (String filename : args) {
       File inFile = new File(filename);
@@ -82,8 +83,7 @@ public final class BibtexClean {
           }
         }
       } catch (IOException e) {
-        System.err.printf(
-            "Problem reading %s + or writing %s: %s", inFile, outFile, e.getMessage());
+        System.err.printf("Problem reading %s or writing %s: %s", inFile, outFile, e.getMessage());
         System.exit(2);
       }
     }
